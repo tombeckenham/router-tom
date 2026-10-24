@@ -51,6 +51,9 @@ Each scenario isolates one Start server-side responsibility so benchmark changes
 | `server-fns`                             | `createServerFn` GET/POST request handling, thrown redirect/notFound results, sendContext serialization, SSR-time direct calls, middleware context, input validation, and URL discovery.                                  |
 | `server-routes`                          | File route `server.handlers` dispatch for parameterized JSON API routes without document HTML rendering.                                                                                                                  |
 | `server-routes-middleware`               | Server route request middleware chains, middleware-provided context merging, and handler access to accumulated context.                                                                                                   |
+| `server-routes-api`                      | Same routes as `server-routes`, served through the experimental `createApiHandler` fast path that dispatches server-only routes without building a Router (react only).                                                   |
+| `server-routes-hono`                     | Reference point: the `server-routes` JSON route on Hono with no Start involved, so the gap to a bare router is tracked alongside the Start numbers.                                                                       |
+| `server-fns-api`                         | Same requests as `server-fns`, served through `createApiHandler` (react only).                                                                                                                                            |
 | `streaming`                              | Deferred loader data, `Await`/Suspense fallback output, larger streamed HTML body scanning, streamed HTML ordering, and later dehydration payload emission.                                                               |
 
 ## Run

@@ -21,6 +21,8 @@
 
 ## TanStack Router
 
+<a href="https://app.codspeed.io/tombeckenham/router-tom?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://codspeed.io/badge.json" alt="CodSpeed"/></a>
+
 A modern router designed for type safety, data‑driven navigation, and seamless developer experience.
 
 - End‑to-end type safety (routes, params, loaders)

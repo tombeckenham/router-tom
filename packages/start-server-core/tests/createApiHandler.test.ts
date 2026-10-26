@@ -2,7 +2,11 @@
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory } from '@tanstack/history'
-import { createMiddleware } from '@tanstack/start-client-core'
+import {
+  createMiddleware,
+  getGlobalStartContext,
+  getRouterInstance,
+} from '@tanstack/start-client-core'
 import {
   BaseRootRoute,
   BaseRoute,
@@ -29,7 +33,7 @@ vi.mock('#tanstack-router-entry', () => ({
 }))
 
 vi.mock('../src/server-functions-handler', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/server-functions-handler')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   handleServerAction: (opts: any) => mocks.serverFnHandler?.(opts),
 }))
 
@@ -202,6 +206,40 @@ describe('createApiHandler: server routes', () => {
     await fetch(handler, '/api/users/2')
 
     expect(calls).toEqual(['mw', 'mw'])
+  })
+
+  it('runs route middleware and handlers inside the Start request context', async () => {
+    mocks.routerFactory = () => ({ id: 'lazy', options: {}, update() {} })
+    const mw = createMiddleware({ type: 'request' }).server(({ next }) =>
+      next({ context: { fromGlobal: 1 } }),
+    )
+    const tree = makeTree({
+      routeServer: {
+        middleware: [
+          createMiddleware({ type: 'request' }).server(({ next }) =>
+            next({ context: { seenGlobal: getGlobalStartContext() } }),
+          ),
+        ],
+        handlers: {
+          GET: async ({ context }: any) =>
+            Response.json({
+              ...context,
+              router: ((await getRouterInstance()) as any).id,
+            }),
+        },
+      },
+    })
+    const { handler } = makeHandler(tree, {
+      startOptions: { requestMiddleware: [mw] } as any,
+    })
+
+    const res = await fetch(handler, '/api/users/1')
+
+    expect(await res.json()).toEqual({
+      fromGlobal: 1,
+      seenGlobal: { fromGlobal: 1 },
+      router: 'lazy',
+    })
   })
 
   it('applies params.parse before the handler', async () => {

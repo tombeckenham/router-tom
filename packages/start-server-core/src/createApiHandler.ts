@@ -36,8 +36,6 @@ import type {
   AnyRequestMiddleware,
   AnyStartInstanceOptions,
   RouteMethod,
-  RouterEntry,
-  StartEntry,
 } from '@tanstack/start-client-core'
 import type { RequestHandler } from './request-handler'
 
@@ -58,9 +56,9 @@ function createLazyRouterGetter(request: Request): () => Promise<AnyRouter> {
   let routerPromise: Promise<AnyRouter> | undefined
   return () =>
     (routerPromise ??= (async () => {
-      // @ts-ignore virtual module typed via start-client-core's .d.ts
-      const entry = (await import('#tanstack-router-entry')) as RouterEntry
-      const router = await entry.getRouter()
+      // @ts-ignore the declaration build does not see start-client-core's start-entry.d.ts
+      const { getRouter } = await import('#tanstack-router-entry')
+      const router = await getRouter()
       const url = new URL(request.url)
       router.update({
         history: createServerHistory(url.pathname + url.search + url.hash),
@@ -71,9 +69,10 @@ function createLazyRouterGetter(request: Request): () => Promise<AnyRouter> {
     })())
 }
 
+// Mirrors executeMiddleware's own parameter types, so this tightens when they do.
 type Chain = {
-  middlewares: Array<any>
-  handler: (ctx: any) => unknown
+  middlewares: Parameters<typeof executeMiddleware>[0]
+  handler: Parameters<typeof executeMiddleware>[1]
 }
 
 type Fallback = (request: Request, opts: any) => Promise<Response> | Response
@@ -101,9 +100,9 @@ export function createApiHandler<TRegister = unknown>(opts: {
         (await import('virtual:tanstack-start-api-route-tree')).apiRouteTree
       let startOptions = opts.startOptions
       if (!startOptions) {
-        // @ts-ignore virtual module typed via start-client-core's .d.ts
-        const entry = (await import('#tanstack-start-entry')) as StartEntry
-        startOptions = await entry.startInstance?.getOptions()
+        // @ts-ignore the declaration build does not see start-client-core's start-entry.d.ts
+        const { startInstance } = await import('#tanstack-start-entry')
+        startOptions = await startInstance?.getOptions()
       }
       return (dispatch = createDispatcher(
         routeTree,
@@ -176,7 +175,9 @@ function createDispatcher(
     if (!handler) {
       return undefined
     }
-    const middlewares: Chain['middlewares'] = [...globalMiddlewares]
+    // Route and handler middleware only; global middleware runs first and
+    // outside the Start request context, as in createStartHandler.
+    const middlewares: Chain['middlewares'] = []
     for (const r of branch) {
       if (r.options.server?.middleware) {
         for (const m of flattenMiddlewares(r.options.server.middleware)) {
@@ -266,9 +267,32 @@ function createDispatcher(
     event: StartEvent,
   ): Promise<Response> {
     const signal = request.signal
+    const getRouter = createLazyRouterGetter(request)
+    const startContext = {
+      getRouter,
+      startOptions,
+      request,
+      executedRequestMiddlewares,
+      handlerType: 'router' as const,
+    }
     const result = await executeMiddleware(
-      chain.middlewares,
-      chain.handler,
+      globalMiddlewares,
+      // Route middleware and the handler see getRouterInstance(),
+      // getGlobalStartContext() and friends, as in createStartHandler.
+      (ctx: any) =>
+        runWithStartContext(
+          { ...startContext, contextAfterGlobalMiddlewares: ctx.context },
+          () =>
+            executeMiddleware(
+              chain.middlewares,
+              chain.handler,
+              ctx,
+              signal,
+              event,
+              // API routes have no component, so a handler may not defer.
+              throwIfMayNotDefer,
+            ),
+        ),
       {
         request,
         context: createNullProtoObject(requestOpts?.context),
@@ -278,14 +302,12 @@ function createDispatcher(
       },
       signal,
       event,
-      // API routes have no component, so a handler may not defer.
-      throwIfMayNotDefer,
     )
     let ssrResponse = normalizeSsrResponse(result)
     if (isRedirect(ssrResponse.response)) {
       ssrResponse = await handleRedirectResponse(
         ssrResponse,
-        createLazyRouterGetter(request),
+        getRouter,
         signal,
         false,
         event,

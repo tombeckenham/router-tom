@@ -5,5 +5,5 @@ export const Route = createFileRoute('/')({
 })
 
 function Home() {
-  return <main>server routes</main>
+  return <main>server routes matrix</main>
 }

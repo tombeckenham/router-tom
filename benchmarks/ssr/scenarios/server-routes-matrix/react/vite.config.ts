@@ -25,7 +25,7 @@ export default defineConfig({
   test: {
     execArgv: cpuSimulationExecArgv(),
     isolate: true,
-    name: '@benchmarks/ssr server-routes-api (react)',
+    name: '@benchmarks/ssr server-routes-matrix (react)',
     watch: false,
     environment: 'node',
   },

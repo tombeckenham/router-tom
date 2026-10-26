@@ -189,6 +189,27 @@ describe('createApiHandler: server routes', () => {
     })
   })
 
+  it('does not rerun route middleware that already ran as global middleware', async () => {
+    const shared = createMiddleware({ type: 'request' }).server(({ next }) => {
+      calls.push('shared')
+      return next()
+    })
+    const tree = makeTree({
+      parentServer: { middleware: [shared] },
+      routeServer: {
+        middleware: [shared],
+        handlers: { GET: () => new Response() },
+      },
+    })
+    const { handler } = makeHandler(tree, {
+      startOptions: { requestMiddleware: [shared] } as any,
+    })
+
+    await fetch(handler, '/api/users/1')
+
+    expect(calls).toEqual(['shared'])
+  })
+
   it('runs middleware once per request even when chains are reused', async () => {
     const mw = createMiddleware({ type: 'request' }).server(({ next }) => {
       calls.push('mw')

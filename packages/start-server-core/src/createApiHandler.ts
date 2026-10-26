@@ -180,8 +180,13 @@ function createDispatcher(
     const middlewares: Chain['middlewares'] = []
     for (const r of branch) {
       if (r.options.server?.middleware) {
-        for (const m of flattenMiddlewares(r.options.server.middleware)) {
-          middlewares.push(m.options.server as any)
+        const routeMiddleware = r.options.server
+          .middleware as Array<AnyRequestMiddleware>
+        for (const m of flattenMiddlewares(routeMiddleware)) {
+          // Already ran in the global phase; Start runs each middleware once.
+          if (!executedRequestMiddlewares.has(m)) {
+            middlewares.push(m.options.server as any)
+          }
         }
       }
     }

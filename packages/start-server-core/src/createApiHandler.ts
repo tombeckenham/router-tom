@@ -280,24 +280,18 @@ function createDispatcher(
       executedRequestMiddlewares,
       handlerType: 'router' as const,
     }
+    // One flat pipeline: a nested executeMiddleware for the route chain costs
+    // more than the Start context itself. This step runs after the global
+    // middleware, so route middleware and the handler see getRouterInstance(),
+    // getGlobalStartContext() and friends, as in createStartHandler.
+    const enterStartContext = (ctx: any) =>
+      runWithStartContext(
+        { ...startContext, contextAfterGlobalMiddlewares: ctx.context },
+        () => ctx.next(),
+      )
     const result = await executeMiddleware(
-      globalMiddlewares,
-      // Route middleware and the handler see getRouterInstance(),
-      // getGlobalStartContext() and friends, as in createStartHandler.
-      (ctx: any) =>
-        runWithStartContext(
-          { ...startContext, contextAfterGlobalMiddlewares: ctx.context },
-          () =>
-            executeMiddleware(
-              chain.middlewares,
-              chain.handler,
-              ctx,
-              signal,
-              event,
-              // API routes have no component, so a handler may not defer.
-              throwIfMayNotDefer,
-            ),
-        ),
+      [...globalMiddlewares, enterStartContext, ...chain.middlewares],
+      chain.handler,
       {
         request,
         context: createNullProtoObject(requestOpts?.context),
@@ -307,6 +301,8 @@ function createDispatcher(
       },
       signal,
       event,
+      // API routes have no component, so a handler may not defer.
+      throwIfMayNotDefer,
     )
     let ssrResponse = normalizeSsrResponse(result)
     if (isRedirect(ssrResponse.response)) {

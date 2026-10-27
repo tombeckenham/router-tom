@@ -16,6 +16,10 @@ import {
   redirect,
 } from '@tanstack/router-core'
 import { createApiHandler } from '../src/createApiHandler'
+import {
+  getStartEvent,
+  withStartRequest,
+} from '../src/internal-request-response'
 import type { AnyRoute } from '@tanstack/router-core'
 
 const mocks = vi.hoisted(() => {
@@ -123,6 +127,29 @@ describe('createApiHandler: server routes', () => {
       expect(res.status).toBe(599)
     }
     expect(fallback).toHaveBeenCalledTimes(4)
+  })
+
+  it('runs a withStartRequest fallback inside its own request event, not a second one', async () => {
+    const events: Array<unknown> = []
+    const fallback = withStartRequest((request, _opts, event) => {
+      events.push(event, getStartEvent())
+      return new Response('fallback', { status: 599 })
+    })
+    const outer = vi.fn()
+    const handler = createApiHandler({
+      routeTree: makeTree({}),
+      fallback: (request, opts) => {
+        outer(getStartEvent())
+        return fallback(request, opts)
+      },
+    })
+
+    const res = await fetch(handler, '/nope')
+
+    expect(res.status).toBe(599)
+    // One event for the whole request: the fallback's wrapper reused it.
+    expect(events[0]).toBe(events[1])
+    expect(outer).toHaveBeenCalledWith(events[0])
   })
 
   it('serves HEAD from GET with the same headers and no body', async () => {

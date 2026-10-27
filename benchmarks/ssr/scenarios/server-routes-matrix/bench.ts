@@ -20,11 +20,39 @@ const htmlRequestInit = {
 
 interface Shape {
   totalRequests: number
-  /** Hono has no page fallback, so some shapes measure Start only. */
-  hono: boolean
+  /**
+   * Fallback shapes compare Start against both fast-path fallbacks (static
+   * and dynamic import) and skip Hono, which has no page to fall back to.
+   */
+  fallback: boolean
   options: { warmupIterations: number; time: number; throws: true }
   buildRequest: (random: () => number) => Request
+  /** Defaults to requiring status 200. */
+  validateResponse?: (response: Response, request: Request) => void
   assert: (handler: StartRequestHandler) => Promise<void>
+}
+
+const fallbackOptions = {
+  warmupIterations: 10,
+  time: 10_000,
+  throws: true,
+} as const
+
+async function expectHtml(
+  handler: StartRequestHandler,
+  path: string,
+  status: number,
+  marker: string,
+) {
+  const response = await handler.fetch(
+    new Request(`http://localhost${path}`, htmlRequestInit),
+  )
+  const html = await response.text()
+  if (response.status !== status || !html.includes(marker)) {
+    throw new Error(
+      `${path}: expected ${status} with "${marker}", received ${response.status}`,
+    )
+  }
 }
 
 const jsonOptions = {
@@ -58,7 +86,7 @@ export const shapes = {
   // Exact static match, hits the matcher cache every time.
   static: {
     totalRequests: 208,
-    hono: true,
+    fallback: false,
     options: jsonOptions,
     buildRequest: () =>
       new Request('http://localhost/api/health', jsonRequestInit),
@@ -68,7 +96,7 @@ export const shapes = {
   // request, so the matcher cache misses every time.
   param: {
     totalRequests: 208,
-    hono: true,
+    fallback: false,
     options: jsonOptions,
     buildRequest: (random) =>
       new Request(
@@ -81,7 +109,7 @@ export const shapes = {
   // Three request middlewares up the branch: layout, route, handler.
   'nested-middleware': {
     totalRequests: 208,
-    hono: true,
+    fallback: false,
     options: jsonOptions,
     buildRequest: (random) =>
       new Request(
@@ -94,7 +122,7 @@ export const shapes = {
   // 200 static siblings, requests spread across all of them.
   'many-routes': {
     totalRequests: 208,
-    hono: true,
+    fallback: false,
     options: jsonOptions,
     buildRequest: (random) =>
       new Request(
@@ -109,20 +137,28 @@ export const shapes = {
   // A page request: the fast path must hand it to Start at no extra cost.
   'page-fallback': {
     totalRequests: 48,
-    hono: false,
-    options: { warmupIterations: 10, time: 10_000, throws: true },
+    fallback: true,
+    options: fallbackOptions,
     buildRequest: () => new Request('http://localhost/', htmlRequestInit),
-    assert: async (handler) => {
-      const response = await handler.fetch(
-        new Request('http://localhost/', htmlRequestInit),
-      )
-      const html = await response.text()
-      if (response.status !== 200 || !html.includes('server routes matrix')) {
+    assert: (handler) => expectHtml(handler, '/', 200, 'server routes matrix'),
+  },
+  // An unknown path under /api: the fast path matches, misses, then Start
+  // renders its 404 page. The worst case for the fallback.
+  'api-miss': {
+    totalRequests: 48,
+    fallback: true,
+    options: fallbackOptions,
+    buildRequest: () =>
+      new Request('http://localhost/api/does-not-exist', htmlRequestInit),
+    validateResponse: (response, request) => {
+      if (response.status !== 404) {
         throw new Error(
-          `/: expected the rendered page, received ${response.status}`,
+          `Expected 404, received ${response.status} (${request.url})`,
         )
       }
     },
+    assert: (handler) =>
+      expectHtml(handler, '/api/does-not-exist', 404, 'Not Found'),
   },
 } satisfies Record<string, Shape>
 
@@ -134,6 +170,7 @@ export function runShapeLoop(handler: StartRequestHandler, shape: Shape) {
     concurrency,
     totalRequests: shape.totalRequests,
     buildRequest: shape.buildRequest,
+    validateResponse: shape.validateResponse,
   })
 }
 
@@ -150,12 +187,15 @@ export async function defineShapeBenches(
   const app = (await import(/* @vite-ignore */ appModuleUrl)) as {
     default: StartRequestHandler
     start: StartRequestHandler
+    apiLazy: StartRequestHandler
   }
   const handlers: Array<[label: string, handler: StartRequestHandler]> = [
     ['start (react)', app.start],
     ['api-handler (react)', app.default],
   ]
-  if (shape.hono) {
+  if (shape.fallback) {
+    handlers.push(['api-handler-lazy (react)', app.apiLazy])
+  } else {
     handlers.push(['hono', honoApp])
   }
   for (const [label, handler] of handlers) {

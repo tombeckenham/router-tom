@@ -9,3 +9,12 @@ export { start }
 export default {
   fetch: createApiHandler({ fallback: start.fetch }),
 }
+
+// The fallback shape apps actually write (see e2e/react-start/basic): a
+// dynamic import per fallback request. Measures that hop deterministically.
+export const apiLazy = {
+  fetch: createApiHandler({
+    fallback: async (request, opts) =>
+      (await import('./ssr')).default.fetch(request, opts),
+  }),
+}

@@ -105,6 +105,8 @@ export function tanStackStartRouter(
   corePluginOpts: TanStackStartVitePluginCoreOptions,
 ): Array<PluginOption> {
   const routerPluginContext = createRouterPluginContext()
+  const API_TREE_ID = 'virtual:tanstack-start-api-route-tree'
+  const RESOLVED_API_TREE_ID = '\0' + API_TREE_ID
 
   const getGeneratedRouteTreePath = () => {
     const { startConfig } = getConfig()
@@ -126,12 +128,27 @@ export function tanStackStartRouter(
     clientEnvironment.hot.send({ type: 'full-reload', path: '*' })
   }
 
+  let serverEnvironment: DevEnvironment | null = null
+  // The API tree is virtual, so no file change invalidates it. Adding or
+  // removing a route file must reach the dev runner, which re-fetches the
+  // module and its importers (the server entry) on the next request.
+  function invalidateApiTree() {
+    const mod =
+      serverEnvironment?.moduleGraph.getModuleById(RESOLVED_API_TREE_ID)
+    if (mod) {
+      serverEnvironment!.moduleGraph.invalidateModule(mod)
+    }
+  }
+
   let generatorInstance: Generator | null = null
 
   const clientTreeGeneratorPlugin: GeneratorPlugin = {
     name: 'start-client-tree-plugin',
     init({ generator }) {
       generatorInstance = generator
+    },
+    onRouteTreeChanged() {
+      invalidateApiTree()
     },
     afterTransform({ node, prevNode }) {
       if (isServerOnlyNode(node) !== isServerOnlyNode(prevNode)) {
@@ -211,12 +228,13 @@ export function tanStackStartRouter(
     },
   }
   // Experimental: server-only routes as their own tree, for createApiHandler.
-  const API_TREE_ID = 'virtual:tanstack-start-api-route-tree'
-  const RESOLVED_API_TREE_ID = '\0' + API_TREE_ID
   const apiTreePlugin: Plugin = {
     name: 'tanstack-start:route-tree-api-plugin',
     enforce: 'pre',
     applyToEnvironment: (env) => env.name === VITE_ENVIRONMENT_NAMES.server,
+    configureServer(server) {
+      serverEnvironment = server.environments[VITE_ENVIRONMENT_NAMES.server]
+    },
     resolveId(id) {
       return id === API_TREE_ID ? RESOLVED_API_TREE_ID : undefined
     },

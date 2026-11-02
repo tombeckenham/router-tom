@@ -204,7 +204,7 @@ function throwRouteHandlerError(): never {
   throw new Error(ERR_NO_RESPONSE)
 }
 
-function throwIfMayNotDefer(): never {
+export function throwIfMayNotDefer(): never {
   throw new Error(ERR_NO_DEFER)
 }
 
@@ -301,7 +301,7 @@ function createLateResponseDisposer(signal: AbortSignal) {
  * Compose middleware around a terminal response handler. With no middleware
  * the terminal runs directly.
  */
-async function executeMiddleware(
+export async function executeMiddleware(
   middlewares: Array<TODO>,
   terminal: TODO,
   ctx: PipelineContext,
@@ -1014,7 +1014,7 @@ const SERIALIZED_REDIRECT_HEADERS: ReadonlyMap<string, string | null> = new Map(
   ],
 )
 
-async function handleRedirectResponse(
+export async function handleRedirectResponse(
   ssrResponse: SsrResponse,
   getRouter: () => Promise<AnyRouter>,
   signal: AbortSignal,
@@ -1103,7 +1103,7 @@ async function handleRedirectResponse(
   return ssrResponse
 }
 
-function withParsedParams(
+export function withParsedParams(
   handler: RouteMethodHandlerFn<any, AnyRoute, any, any, any, any, any>,
   matchedRoutes: ReadonlyArray<AnyRoute>,
 ): TODO {

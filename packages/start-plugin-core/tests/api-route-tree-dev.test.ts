@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import path from 'pathe'
 import { parseStartConfig } from '../src/vite/schema'
 import { tanStackStartRouter } from '../src/vite/start-router-plugin/plugin'
+import type { TanStackStartVitePluginCoreOptions } from '../src/vite/types'
 
+// The router plugin only reads `framework` from these.
 const corePluginOpts = { framework: 'react' as const }
 
 let root: string
@@ -46,7 +48,7 @@ describe('virtual API route tree in dev', () => {
     const plugins = tanStackStartRouter(
       {},
       () => ({ startConfig, resolvedStartConfig: {} as any }),
-      corePluginOpts,
+      corePluginOpts as TanStackStartVitePluginCoreOptions,
     ) as Array<any>
     const client = fakeEnvironment()
     const server = fakeEnvironment()

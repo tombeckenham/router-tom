@@ -10,11 +10,11 @@ declare module 'tanstack-start-route-tree:v' {
   export const routeTree: AnyRoute | undefined
 }
 
-declare module 'virtual:tanstack-start-api-route-tree' {
+declare module '#tanstack-start-api-route-tree' {
   import type { AnyRoute } from '@tanstack/router-core'
 
-  /** Server-only routes (no UI), with a bare root. Experimental. */
-  export const apiRouteTree: AnyRoute
+  /** Server-only routes (no UI) with a bare root, or undefined when unavailable. */
+  export const apiRouteTree: AnyRoute | undefined
 }
 
 declare module '#tanstack-start-server-fn-resolver' {

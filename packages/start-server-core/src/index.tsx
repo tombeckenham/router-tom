@@ -1,6 +1,5 @@
 export { createStartHandler } from './createStartHandler'
 export type { CreateStartHandlerOptions } from './createStartHandler'
-export { createApiHandler } from './createApiHandler'
 
 export type {
   TransformAssets,

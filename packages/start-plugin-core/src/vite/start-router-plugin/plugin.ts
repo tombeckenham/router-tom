@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import * as t from '@babel/types'
 import { parseAst } from '@tanstack/router-utils'
 import { createRouterPluginContext } from '@tanstack/router-plugin/context'
+import { VIRTUAL_MODULES } from '@tanstack/start-server-core/virtual-modules'
 import {
   tanStackRouterCodeSplitter,
   tanstackRouterGenerator,
@@ -105,7 +106,7 @@ export function tanStackStartRouter(
   corePluginOpts: TanStackStartVitePluginCoreOptions,
 ): Array<PluginOption> {
   const routerPluginContext = createRouterPluginContext()
-  const API_TREE_ID = 'virtual:tanstack-start-api-route-tree'
+  const API_TREE_ID = VIRTUAL_MODULES.apiRouteTree
   const RESOLVED_API_TREE_ID = '\0' + API_TREE_ID
 
   const getGeneratedRouteTreePath = () => {
@@ -227,7 +228,9 @@ export function tanStackStartRouter(
       },
     },
   }
-  // Experimental: server-only routes as their own tree, for createApiHandler.
+  // Server-only routes as their own tree, so createStartHandler can dispatch
+  // them without a Router. When the tree cannot be made safely the module
+  // exports `undefined` and every request takes the Router path.
   const apiTreePlugin: Plugin = {
     name: 'tanstack-start:route-tree-api-plugin',
     enforce: 'pre',
@@ -249,6 +252,12 @@ export function tanStackStartRouter(
       if (!crawlingResult) {
         throw new Error('Crawling result not available')
       }
+      const disabled = (reason: string) => {
+        this.warn(
+          `Server-route fast path disabled: ${reason} Server routes still work through the Router.`,
+        )
+        return { code: 'export const apiRouteTree = undefined\n', map: null }
+      }
       // The API tree replaces __root with a bare root, so root server
       // middleware (often auth) would be silently skipped. Fail closed,
       // including when the root options cannot be read statically.
@@ -257,8 +266,8 @@ export function tanStackStartRouter(
           crawlingResult.rootRouteNode.fullPath,
         )
       ) {
-        throw new Error(
-          `${API_TREE_ID}: the root route defines \`server\` options (or its options could not be read statically), which createApiHandler cannot run. Move root server middleware to the API routes or to global requestMiddleware.`,
+        return disabled(
+          'the root route defines `server` options (or its options could not be read statically). Move root server middleware to the API routes or to global requestMiddleware.',
         )
       }
       // Keep only subtrees where every node is server-only, so the tree never
@@ -292,8 +301,8 @@ export function tanStackStartRouter(
         }
         const shadowed = pruned.find((p) => urlPath(p).startsWith(prefix))
         if (shadowed) {
-          throw new Error(
-            `${API_TREE_ID}: server-only route "${kept.routePath}" would shadow "${shadowed.routePath}" in the API tree. Give the API route a static prefix no page route shares, or add a component to it.`,
+          return disabled(
+            `server-only route "${kept.routePath}" would shadow "${shadowed.routePath}". Give the API route a static prefix no page route shares, or add a component to it.`,
           )
         }
       }

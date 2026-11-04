@@ -31,7 +31,7 @@ afterEach(async () => {
 })
 
 function fakeEnvironment() {
-  const mod = { id: '\0virtual:tanstack-start-api-route-tree' }
+  const mod = { id: '\0#tanstack-start-api-route-tree' }
   return {
     moduleGraph: {
       getModuleById: vi.fn((id: string) => (id === mod.id ? mod : undefined)),
@@ -41,6 +41,60 @@ function fakeEnvironment() {
     runner: { evaluatedModules: { getModuleById: vi.fn() } },
   }
 }
+
+function setup() {
+  const startConfig = parseStartConfig({}, corePluginOpts, root)
+  const plugins = tanStackStartRouter(
+    {},
+    () => ({ startConfig, resolvedStartConfig: {} as any }),
+    corePluginOpts as TanStackStartVitePluginCoreOptions,
+  ) as Array<any>
+  return {
+    plugins,
+    generator: plugins.find((p) => p.name === 'tanstack:router-generator'),
+    apiTree: plugins.find(
+      (p) => p.name === 'tanstack-start:route-tree-api-plugin',
+    ),
+  }
+}
+
+describe('virtual API route tree', () => {
+  it('exports the server-only routes with a bare root', async () => {
+    const { generator, apiTree } = setup()
+    await generator.vite.configResolved({ root })
+    const warn = vi.fn()
+
+    const result = await apiTree.load.call(
+      { warn },
+      '\0#tanstack-start-api-route-tree',
+    )
+
+    expect(warn).not.toHaveBeenCalled()
+    expect(result.code).toContain('export const apiRouteTree =')
+    expect(result.code).toContain('const rootRouteImport = createRootRoute()')
+    expect(result.code).toContain('api/health')
+  }, 30_000)
+
+  it('exports undefined with a warning when the root route has server options', async () => {
+    await writeFile(
+      path.join(routesDir, '__root.tsx'),
+      `import { createRootRoute } from '@tanstack/react-router'\nexport const Route = createRootRoute({ server: { middleware: [] } })\n`,
+    )
+    const { generator, apiTree } = setup()
+    await generator.vite.configResolved({ root })
+    const warn = vi.fn()
+
+    const result = await apiTree.load.call(
+      { warn },
+      '\0#tanstack-start-api-route-tree',
+    )
+
+    expect(result.code).toBe('export const apiRouteTree = undefined\n')
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Server-route fast path disabled'),
+    )
+  }, 30_000)
+})
 
 describe('virtual API route tree in dev', () => {
   it('invalidates the server module when a server-only route file is created', async () => {
@@ -70,7 +124,7 @@ describe('virtual API route tree in dev', () => {
 
     expect(server.moduleGraph.invalidateModule).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: '\0virtual:tanstack-start-api-route-tree',
+        id: '\0#tanstack-start-api-route-tree',
       }),
     )
   }, 30_000)

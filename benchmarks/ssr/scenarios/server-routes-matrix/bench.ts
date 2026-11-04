@@ -20,10 +20,7 @@ const htmlRequestInit = {
 
 interface Shape {
   totalRequests: number
-  /**
-   * Fallback shapes compare Start against both fast-path fallbacks (static
-   * and dynamic import) and skip Hono, which has no page to fall back to.
-   */
+  /** Page shapes skip Hono, which has no page to render. */
   fallback: boolean
   options: { warmupIterations: number; time: number; throws: true }
   buildRequest: (random: () => number) => Request
@@ -134,7 +131,7 @@ export const shapes = {
         n: MANY_ROUTE_COUNT - 1,
       }),
   },
-  // A page request: the fast path must hand it to Start at no extra cost.
+  // A page request: the server-route fast path must miss at no extra cost.
   'page-fallback': {
     totalRequests: 48,
     fallback: true,
@@ -142,8 +139,8 @@ export const shapes = {
     buildRequest: () => new Request('http://localhost/', htmlRequestInit),
     assert: (handler) => expectHtml(handler, '/', 200, 'server routes matrix'),
   },
-  // An unknown path under /api: the fast path matches, misses, then Start
-  // renders its 404 page. The worst case for the fallback.
+  // An unknown path under /api: the fast path misses, then the Router
+  // renders its 404 page. The worst case for the miss.
   'api-miss': {
     totalRequests: 48,
     fallback: true,
@@ -175,9 +172,8 @@ export function runShapeLoop(handler: StartRequestHandler, shape: Shape) {
 }
 
 /**
- * Registers one benchmark per handler for a shape. The built app exports the
- * fast path as `default` and the plain Start handler as `start`, so all three
- * handlers serve the same route table.
+ * Registers one benchmark per handler for a shape: the built Start app and,
+ * for API shapes, a Hono reference serving the same route table.
  */
 export async function defineShapeBenches(
   shapeName: ShapeName,
@@ -186,16 +182,11 @@ export async function defineShapeBenches(
   const shape: Shape = shapes[shapeName]
   const app = (await import(/* @vite-ignore */ appModuleUrl)) as {
     default: StartRequestHandler
-    start: StartRequestHandler
-    apiLazy: StartRequestHandler
   }
   const handlers: Array<[label: string, handler: StartRequestHandler]> = [
-    ['start (react)', app.start],
-    ['api-handler (react)', app.default],
+    ['start (react)', app.default],
   ]
-  if (shape.fallback) {
-    handlers.push(['api-handler-lazy (react)', app.apiLazy])
-  } else {
+  if (!shape.fallback) {
     handlers.push(['hono', honoApp])
   }
   for (const [label, handler] of handlers) {

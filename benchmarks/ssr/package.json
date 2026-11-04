@@ -49,7 +49,6 @@
               "@benchmarks/ssr-server-fn-transport-react",
               "@benchmarks/ssr-server-fns-react",
               "@benchmarks/ssr-server-routes-react",
-              "@benchmarks/ssr-server-fns-api-react",
               "@benchmarks/ssr-server-routes-matrix-react",
               "@benchmarks/ssr-server-routes-middleware-react",
               "@benchmarks/ssr-streaming-react"
@@ -185,7 +184,6 @@
               "@benchmarks/ssr-server-fn-transport-react",
               "@benchmarks/ssr-server-fns-react",
               "@benchmarks/ssr-server-routes-react",
-              "@benchmarks/ssr-server-fns-api-react",
               "@benchmarks/ssr-server-routes-matrix-react",
               "@benchmarks/ssr-server-routes-middleware-react",
               "@benchmarks/ssr-streaming-react",

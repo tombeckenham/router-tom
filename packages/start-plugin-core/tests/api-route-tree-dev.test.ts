@@ -94,6 +94,30 @@ describe('virtual API route tree', () => {
       expect.stringContaining('Server-route fast path disabled'),
     )
   }, 30_000)
+
+  it('exports undefined with a warning when a server-only param route would shadow a page', async () => {
+    await writeFile(
+      path.join(routesDir, 'api/$.ts'),
+      `import { createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/api/$')({ server: { handlers: { GET: () => new Response('splat') } } })\n`,
+    )
+    await writeFile(
+      path.join(routesDir, 'api/docs.tsx'),
+      `import { createFileRoute } from '@tanstack/react-router'\nexport const Route = createFileRoute('/api/docs')({ component: () => null })\n`,
+    )
+    const { generator, apiTree } = setup()
+    await generator.vite.configResolved({ root })
+    const warn = vi.fn()
+
+    const result = await apiTree.load.call(
+      { warn },
+      '\0#tanstack-start-api-route-tree',
+    )
+
+    expect(result.code).toBe('export const apiRouteTree = undefined\n')
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('would shadow "/api/docs"'),
+    )
+  }, 30_000)
 })
 
 describe('virtual API route tree in dev', () => {

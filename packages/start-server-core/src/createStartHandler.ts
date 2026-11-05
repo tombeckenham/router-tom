@@ -239,9 +239,6 @@ function getRequestSetup(
   return setup
 }
 
-const API_ROUTER_BASEPATH =
-  (process.env.TSS_ROUTER_BASEPATH || '/').replace(/\/+$/, '') || '/'
-
 /**
  * Exact server-route match from the server-only tree, or undefined when the
  * request needs the full Router: pages, fuzzy matches, methods without a
@@ -257,11 +254,12 @@ function matchApiRoute(
   }
   // Routes live under the router basepath; anything outside it is not ours.
   let routePath = pathname
-  if (API_ROUTER_BASEPATH !== '/') {
-    if (pathname === API_ROUTER_BASEPATH) {
+  if (ROUTER_BASEPATH !== '/') {
+    const basepath = trimPathRight(ROUTER_BASEPATH)
+    if (pathname === basepath) {
       routePath = '/'
-    } else if (pathname.startsWith(API_ROUTER_BASEPATH + '/')) {
-      routePath = pathname.slice(API_ROUTER_BASEPATH.length)
+    } else if (pathname.startsWith(basepath + '/')) {
+      routePath = pathname.slice(basepath.length)
     } else {
       return undefined
     }
